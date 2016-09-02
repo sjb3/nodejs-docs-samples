@@ -15,12 +15,13 @@
 
 var uuid = require('node-uuid');
 var PubSub = require('@google-cloud/pubsub');
-var pubsub = PubSub();
 var program = require('../subscriptions');
+
+var pubsub = PubSub();
 var topicName = 'nodejs-docs-samples-test-' + uuid.v4();
 var subscriptionName = 'nodejs-docs-samples-test-sub-' + uuid.v4();
 var projectId = process.env.GCLOUD_PROJECT;
-var name = 'projects/' + projectId + '/subscriptions/' + subscriptionName;
+var fullSubscriptionName = 'projects/' + projectId + '/subscriptions/' + subscriptionName;
 
 describe('pubsub:subscriptions', function () {
   before(function (done) {
@@ -35,12 +36,24 @@ describe('pubsub:subscriptions', function () {
 
   describe('createSubscription', function () {
     it('should create a subscription', function (done) {
-      program.createSubscription(topicName, subscriptionName, function (err, subscription) {
+      program.createSubscription(topicName, subscriptionName, function (err, subscription, apiResponse) {
         assert.ifError(err);
-        assert.equal(subscription.name, name);
+        assert.equal(subscription.name, fullSubscriptionName);
         assert(console.log.calledWith('Created subscription %s to topic %s', subscriptionName, topicName));
-        // The next test sometimes fails, so, slow this test down
+        assert.notEqual(apiResponse, undefined);
+        // Listing is eventually consistent, so give the index time to update
         setTimeout(done, 5000);
+      });
+    });
+  });
+
+  describe('getSubscriptionMetadata', function () {
+    it('should get metadata for a subscription', function (done) {
+      program.getSubscriptionMetadata(subscriptionName, function (err, metadata) {
+        assert.ifError(err);
+        assert.equal(metadata.name, fullSubscriptionName);
+        assert(console.log.calledWith('Got metadata for subscription: %s', subscriptionName));
+        done();
       });
     });
   });
@@ -52,22 +65,27 @@ describe('pubsub:subscriptions', function () {
         assert(Array.isArray(subscriptions));
         assert(subscriptions.length > 0);
         var recentlyCreatedSubscriptions = subscriptions.filter(function (subscription) {
-          return subscription.name === name;
+          return subscription.name === fullSubscriptionName;
         });
         assert.equal(recentlyCreatedSubscriptions.length, 1, 'list has newly created subscription');
-        assert(console.log.calledWith('Found %d subscriptions!', subscriptions.length));
+        assert(console.log.calledWith('Found %d subscription(s)!', subscriptions.length));
+        done();
+      });
+    });
+  });
 
-        program.listSubscriptions(undefined, function (err, allSubscriptions) {
-          assert.ifError(err);
-          assert(Array.isArray(allSubscriptions));
-          assert(allSubscriptions.length > 0);
-          var recentlyCreatedAllSubscriptions = allSubscriptions.filter(function (subscription) {
-            return subscription.name === name;
-          });
-          assert.equal(recentlyCreatedAllSubscriptions.length, 1, 'list has newly created subscription');
-          assert(console.log.calledWith('Found %d subscriptions!', allSubscriptions.length));
-          done();
+  describe('listAllSubscriptions', function () {
+    it('should list all subscriptions', function (done) {
+      program.listAllSubscriptions(function (err, allSubscriptions) {
+        assert.ifError(err);
+        assert(Array.isArray(allSubscriptions));
+        assert(allSubscriptions.length > 0);
+        var recentlyCreatedAllSubscriptions = allSubscriptions.filter(function (subscription) {
+          return subscription.name === fullSubscriptionName;
         });
+        assert.equal(recentlyCreatedAllSubscriptions.length, 1, 'list has newly created subscription');
+        assert(console.log.calledWith('Found %d subscription(s)!', allSubscriptions.length));
+        done();
       });
     });
   });
@@ -84,8 +102,8 @@ describe('pubsub:subscriptions', function () {
         assert.ifError(err);
         assert(Array.isArray(messages));
         assert(messages.length > 0);
-        assert(console.log.calledWith('Pulled %d messages!', messages.length));
-        assert(console.log.calledWith('Acked %d messages!', messages.length));
+        assert(console.log.calledWith('Pulled %d message(s)!', messages.length));
+        assert(console.log.calledWith('Acked %d message(s)!', messages.length));
         assert.equal(messages[0].data, expected);
         done();
       });
